@@ -1,0 +1,4 @@
+# Minimal deps for CI only. CI validates code + runs unit tests; it does NOT
+# install the heavy sagemaker / scikit-learn stack and never calls AWS.
+pandas>=1.5
+pytest>=7.0

@@ -1,0 +1,57 @@
+# ITI113 Team 16 - Continuous Integration (partial CI/CD)
+# Scope: on every push / PR, validate the code and run unit tests on the shared
+# labelling module. This guards the train/serve contract (preprocess.py and
+# inference.py both depend on singlish_labelling.py) before anything reaches
+# SageMaker. CI is cloud-free and fast: it does not call AWS or run billable jobs.
+name: CI
+
+"on":
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch: {}
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CI dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-ci.txt
+
+      - name: Validate Python scripts compile (syntax check)
+        run: |
+          # Compile every pipeline script without importing heavy cloud deps.
+          find . -path ./.git -prune -o -name "*.py" -print | xargs -r python -m py_compile
+          echo "All .py files compiled cleanly."
+
+      - name: Validate notebooks are well-formed
+        run: |
+          python - <<'PY'
+          import json, glob, sys
+          bad = []
+          for nb in glob.glob("**/*.ipynb", recursive=True):
+              try:
+                  doc = json.load(open(nb, encoding="utf-8"))
+                  assert "cells" in doc and "nbformat" in doc
+              except Exception as e:
+                  bad.append((nb, str(e)))
+          if bad:
+              for nb, e in bad:
+                  print(f"INVALID: {nb} -> {e}")
+              sys.exit(1)
+          print("All notebooks are valid JSON with a cells/nbformat structure.")
+          PY
+
+      - name: Run unit tests
+        run: pytest -q

@@ -1,0 +1,50 @@
+# ---- ITI113 Team 16 repo ignore rules ----
+# Keep the repo to code, notebooks, tests and config. Data, artifacts,
+# caches and secrets stay OUT of Git.
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data (the corpus is large and lives in S3, not Git)
+smsCorpus*.json
+*.parquet
+*.csv
+data/
+raw/
+processed/
+
+# Model artifacts / trained models
+*.joblib
+*.pkl
+*.tar.gz
+model/
+models/
+artifacts/
+
+# Gradio demo leftovers + the backup recording (store the video off-Git)
+flagged/
+gradio_cached_examples/
+*.mp4
+*.mov
+
+# AWS / credentials / secrets  (never commit these)
+.aws/
+*.pem
+*.key
+credentials
+.env
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS noise
+.DS_Store
+Thumbs.db
