@@ -3,6 +3,10 @@
 Reads the raw NUS SMS Corpus JSON, applies Option C labelling via the shared
 singlish_labelling module, removes duplicates, scrubs PII, and writes
 train/test splits. No scaler is fitted here: TF-IDF lives in the model Pipeline.
+
+The 'none' class is capped in the TRAINING set only (after the split); the test
+set keeps its natural, real-world distribution. This matches the model-development
+notebook so the deployed model equals the reported champion.
 """
 import os
 import sys
@@ -18,6 +22,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--test-size",    type=float, default=0.20)
 parser.add_argument("--random-state", type=int,   default=42)
 parser.add_argument("--min-class-count", type=int, default=100)
+# Cap 'none' in TRAINING ONLY to (cap-multiple x largest marker). <=0 disables.
+parser.add_argument("--cap-multiple", type=int, default=3)
 args = parser.parse_args()
 
 input_dir  = "/opt/ml/processing/input"
@@ -84,8 +90,29 @@ if too_rare:
 from sklearn.model_selection import train_test_split
 X = data["context"].fillna("")
 y = data["label"]
+# Split on the NATURAL distribution first (test set stays real-world).
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=args.test_size, random_state=args.random_state, stratify=y)
+
+# --- Cap 'none' in the TRAINING set only (test set untouched) ---
+# Same logic as the model-development notebook so the deployed model matches the champion.
+if args.cap_multiple and args.cap_multiple > 0:
+    train_df = pd.DataFrame({"context": X_train, "label": y_train})
+    non_none = train_df[train_df["label"] != "none"]["label"].value_counts()
+    if len(non_none) > 0:
+        largest_marker = int(non_none.max())
+        cap = largest_marker * args.cap_multiple
+        none_train = train_df[train_df["label"] == "none"]
+        if len(none_train) > cap:
+            keep_none = none_train.sample(n=cap, random_state=args.random_state)
+            train_df = pd.concat(
+                [train_df[train_df["label"] != "none"], keep_none]
+            ).reset_index(drop=True)
+            print(f"Training 'none' capped to {cap:,} "
+                  f"(= {args.cap_multiple} x largest marker {largest_marker:,}).")
+        X_train, y_train = train_df["context"], train_df["label"]
+else:
+    print("Capping disabled (cap-multiple <= 0).")
 
 # --- write splits (X is text, Y is label) ---
 pd.DataFrame({"context": X_train}).to_csv(os.path.join(output_dir, "train_features.csv"), index=False)
@@ -94,4 +121,6 @@ pd.DataFrame({"context": X_test}).to_csv(os.path.join(output_dir,  "test_feature
 pd.DataFrame({"label":   y_test}).to_csv(os.path.join(output_dir,  "test_labels.csv"),    index=False)
 
 print(f"Wrote train ({len(X_train)}) and test ({len(X_test)}) splits to {output_dir}")
+print(f"Train 'none' share: {(pd.Series(list(y_train))=='none').mean()*100:.1f}%  "
+      f"| Test 'none' share: {(y_test=='none').mean()*100:.1f}% (natural)")
 print("Classes:", sorted(y.unique()))

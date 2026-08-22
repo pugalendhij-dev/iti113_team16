@@ -40,7 +40,8 @@ print(f"Train: {len(X_train)} | Test: {len(X_test)} | model-type: {args.model_ty
 def make_classifier(kind):
     if kind == "svm":
         # LinearSVC has no predict_proba; wrap for top-3 support.
-        return CalibratedClassifierCV(LinearSVC(class_weight="balanced"))
+        return CalibratedClassifierCV(
+            LinearSVC(class_weight="balanced", random_state=args.random_state))
     if kind == "tree":
         return RandomForestClassifier(
             n_estimators=300, class_weight="balanced",
